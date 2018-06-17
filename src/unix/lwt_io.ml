@@ -1592,20 +1592,30 @@ let establish_server_generic
 
   let rec accept_loop () =
     let try_to_accept =
-      Lwt_unix.accept listening_socket >|= fun x ->
+      Lwt_unix.accept_n listening_socket 10_000 >|= fun x ->
       `Accepted x
     in
 
     Lwt.pick [try_to_accept; should_stop] >>= function
-    | `Accepted (client_socket, client_address) ->
-      begin
-        try Lwt_unix.set_close_on_exec client_socket
-        with Invalid_argument _ -> ()
+    | `Accepted (connections, maybe_error) ->
+      connections
+      |> List.iter begin fun (client_socket, client_address) ->
+        begin
+          try Lwt_unix.set_close_on_exec client_socket
+          with Invalid_argument _ -> ()
+        end;
+
+        connection_handler_callback client_address client_socket
       end;
 
-      connection_handler_callback client_address client_socket;
-
-      accept_loop ()
+      (* Note: this means an exception in accept_n will get passed to
+         Lwt.async_exception_hook and terminate the process. This was an
+         oversight in the previous implementation of this function, however, and
+         will be fixed separately. *)
+      begin match maybe_error with
+      | Some exn -> Lwt.fail exn
+      | None -> accept_loop ()
+      end
 
     | `Should_stop ->
       Lwt_unix.close listening_socket >>= fun () ->
