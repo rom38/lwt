@@ -282,7 +282,6 @@ CAMLprim value lwt_test()
 
 let ocamlc = ref "ocamlc"
 let ocamlc_config = ref ""
-let lwt_config = ref ""
 let ext_obj = ref ".o"
 let exec_name = ref "a.out"
 let use_libev = ref true
@@ -491,22 +490,58 @@ let lib_flags env_var_prefix fallback =
    | Entry point                                                     |
    +-----------------------------------------------------------------+ *)
 
+let use_libev_arg = ref None
+let use_pthread_arg = ref None
+let android_target_arg = ref None
+let libev_default_arg = ref None
+let default_configuration_arg = ref None
+
 let arg_bool r =
   Arg.Symbol (["true"; "false"],
               function
                 | "true" -> r := true
                 | "false" -> r := false
                 | _ -> assert false)
+
+let arg_bool_option r =
+  Arg.Symbol (["true"; "false"],
+              function
+              | "true" -> r := Some true
+              | "false" -> r := Some false
+              | _ -> assert false)
+
 let () =
   let args = [
     "-ocamlc", Arg.Set_string ocamlc, "<path> ocamlc";
     "-ocamlc-config", Arg.Set_string ocamlc_config, "<file> ocamlc config";
-    "-lwt-config", Arg.Set_string lwt_config, "<file> lwt config";
+    "-use-libev", arg_bool_option use_libev_arg,
+      " whether to check for libev";
+    "-use-pthread", arg_bool_option use_pthread_arg,
+      " whether to use pthread";
+    "-android-target", arg_bool_option android_target_arg,
+      " compile for Android";
+    "-libev-default", arg_bool_option libev_default_arg,
+      " whether to use the libev backend by default";
+    "-default-configuration", arg_bool_option default_configuration_arg,
+      " generate a default configuration for a typical opam install";
   ] in
   Arg.parse args ignore "check for external C libraries and available features\noptions are:";
 
   (* Check nothing if we do not build lwt.unix. *)
   if not !use_unix then exit 0;
+
+  begin match !default_configuration_arg with
+  | Some true ->
+    (* Check if we have the opam command and conf-libev is installed. If so,
+       behave as if -use-libev true was passed. *)
+    if Sys.command "opam --version > /dev/null" = 0 then
+      if Sys.command "opam list --installed conf-libev > /dev/null" = 0 then
+        use_libev_arg := Some true
+      else
+        use_libev_arg := Some false
+  | _ ->
+    ()
+  end;
 
   (* Put the caml code into a temporary file. *)
   let file, oc = Filename.open_temp_file "lwt_caml" ".ml" in
@@ -550,7 +585,6 @@ let () =
     exit 1;
   end in
   let ocamlc_config = read_config !ocamlc_config in
-  let lwt_config = try read_config !lwt_config with _ -> [] in
   (* get params from configuration files *)
   let () =
     let get var name =
@@ -566,23 +600,16 @@ let () =
     get ccomp_type "ccomp_type";
     get system "system";
     get os_type "os_type";
-    let get var name default =
-      try
-        let () =
-          match List.assoc name lwt_config with
-          | "true" -> var := true
-          | "false" -> var := false
-          | _ -> raise Not_found
-        in
-        printf "found config var %s: %s %b\n" name (String.make (29 - String.length name) '.') !var
-      with Not_found ->
-        var := default
+    let get var arg default =
+      match !arg with
+      | Some setting -> var := setting
+      | None -> var := default
     in
     (* set up the defaults as per the original _oasis file *)
-    get android_target "android_target" false;
-    get use_pthread "use_pthread" (!os_type <> "Win32");
-    get use_libev "use_libev" (!os_type <> "Win32" && !android_target = false);
-    get libev_default "libev_default"
+    get android_target android_target_arg false;
+    get use_pthread use_pthread_arg (!os_type <> "Win32");
+    get use_libev use_libev_arg (!os_type <> "Win32" && !android_target = false);
+    get libev_default libev_default_arg
       (List.mem !system (* as per _oasis *)
         ["linux"; "linux_elf"; "linux_aout"; "linux_eabi"; "linux_eabihf"]);
   in
