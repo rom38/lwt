@@ -780,15 +780,6 @@ Lwt can use pthread or the win32 API.
   let cflags = cflags_ev @ cflags_pt in
   let libs = libs_ev @ libs_pt in
 
-  (* do sexps properly...
-  let open Base in
-  let open Stdio in
-
-  let write_sexp fn sexp = Out_channel.write_all fn ~data:(Sexp.to_string sexp) in
-  write_sexp ("unix_c_flags.sexp")         (sexp_of_list sexp_of_string ("-I."::cflags));
-  write_sexp ("unix_c_library_flags.sexp") (sexp_of_list sexp_of_string (libs))
-  *)
-
   (* add Win32 linker flags *)
   let libs =
     if !os_type = "Win32" then
