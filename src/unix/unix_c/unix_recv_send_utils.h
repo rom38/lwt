@@ -30,9 +30,9 @@
 #include <sys/socket.h>
 #include <sys/uio.h>
 
-extern int msg_flag_table[];
-extern int socket_domain_table[];
-extern int socket_type_table[];
+int msg_flag_table[];
+int socket_domain_table[];
+int socket_type_table[];
 extern void get_sockaddr(value mladdr, union sock_addr_union *addr /*out*/,
                          socklen_t *addr_len /*out*/);
 void store_iovs(struct iovec *iovs, value iovs_val);
